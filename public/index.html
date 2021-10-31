@@ -1,0 +1,134 @@
+<html>
+    <head>
+        <link rel='stylesheet' href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js" ></script>  
+        <script src="https://unpkg.com/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+        <script src="https://unpkg.com/gijgo@1.9.13/js/gijgo.min.js" type="text/javascript"></script>
+        <link href="https://unpkg.com/gijgo@1.9.13/css/gijgo.min.css" rel="stylesheet" type="text/css" />
+        <title> Web Response Testing</title>
+    </head>
+    <body>
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-3"> 
+            <h2> Web Response Test</h2>
+          </div>
+          <div class="col-9" style="justify-content: center;display: flex;">
+            <input id="datepicker" width="276" />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <div id="curve_chart" style="width: 900px; height: 500px"></div>
+            <h2 id="noData" style="display:none;color:red">No Data Found</h2>
+          </div>
+        </div>
+      </div>
+    </body>
+  </html>
+  <script type="text/javascript">
+    var rawData; 
+    var url = 'https://pttgc-t.procurement.ariba.com';
+    var initDate = (new Date).toLocaleDateString();
+    var today = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    $('#datepicker').datepicker({
+      uiLibrary: 'bootstrap4',
+      change: onCalendarChange,
+      value: initDate,
+      maxDate: today
+    });
+    $(document).ready(function() {
+      var now = new Date();
+      now.setHours(0, 0, 0, 0);
+      var from = now.getTime();
+      now.setHours(24, 0, 0, 0);
+      var to = now.getTime();
+
+      retrieveData(from, to, function(res){
+        if (res.status){
+          rawData = res.data;
+          google.charts.load('current', {'packages':['corechart']});
+          google.charts.setOnLoadCallback(drawChart);
+        }
+      });
+    });
+    function drawChart(){
+      if (rawData[0]){
+        $('#curve_chart').show()
+        $('#noData').hide()
+        var dt = new google.visualization.DataTable();
+        var dateArr = []
+        dt.addColumn('string', 'Time');
+
+        var rowData = [];
+        var keys = Object.keys(rawData[0].response)
+        for(var key of keys){
+          dt.addColumn('number', key + ' (ms)');
+        }
+        var rowData = []
+        for (let ele of rawData){
+          let time = new Date(ele.timestamps)
+          let timeStr = time.getHours() + ":" + String(time.getMinutes()).padStart(2,"0")
+          tmpData = [timeStr]
+          for (let key of keys){
+            tmpData.push(ele.response[key])
+          }
+          rowData.push(tmpData)
+        }
+        dt.addRows(rowData);
+
+        var options = {
+          hAxis: {
+            title: 'Time',
+            textPosition: 'out'
+          },
+          vAxis: {
+            title: url,
+            gridlines: {color: '#333', count: 5}
+          },
+          width: 1200,
+          height: 500
+        };
+
+        var chart = new google.visualization.LineChart(document.getElementById('curve_chart'));
+        var cloneDt = dt.clone();
+        chart.draw(cloneDt, options);
+      } else {
+        $('#curve_chart').hide()
+        $('#noData').show()
+      }
+      
+      return dateArr;
+    }
+    function retrieveData(from, to, cb){
+      //DOM manipulation code
+      $.ajax({
+        url: '/api/response?from=' + from + '&to=' + to + '&url=' + url,
+        success: cb,
+        dataType: 'json',
+        beforeSend: function(request) {
+          request.setRequestHeader("bot_api_key", 'NKK');
+        }
+      });
+    }
+    function onCalendarChange(e){
+      selectedDate = e.target.value;
+      if (selectedDate != initDate){
+        var now = new Date(selectedDate);
+        now.setHours(0, 0, 0, 0);
+        var from = now.getTime();
+        now.setHours(24, 0, 0, 0);
+        var to = now.getTime();
+        retrieveData(from ,to , function(res){
+          if (res.status){
+            rawData = res.data;
+            drawChart()
+          }
+        })
+        
+        initDate = selectedDate;
+      }
+    }
+</script>
